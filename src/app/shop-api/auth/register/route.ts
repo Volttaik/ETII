@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import getDb from "@/lib/db";
+import { supabase } from "@/lib/db";
 import { signToken } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
@@ -10,26 +10,35 @@ export async function POST(req: NextRequest) {
     if (!fullName || !email || !phone || !password) {
       return NextResponse.json({ error: "All fields are required" }, { status: 400 });
     }
-
     if (password.length < 6) {
       return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
     }
 
-    const db = getDb();
-    const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
+    const { data: existing } = await supabase
+      .from("users")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+
     if (existing) {
       return NextResponse.json({ error: "Email already in use" }, { status: 409 });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const result = db.prepare(
-      "INSERT INTO users (fullName, email, phone, password) VALUES (?, ?, ?, ?)"
-    ).run(fullName, email, phone, hashedPassword);
+    const { data: result, error } = await supabase
+      .from("users")
+      .insert({ fullName, email, phone, password: hashedPassword })
+      .select("id")
+      .single();
 
-    const token = signToken({ userId: result.lastInsertRowid, email });
+    if (error || !result) {
+      console.error(error);
+      return NextResponse.json({ error: "Server error" }, { status: 500 });
+    }
 
+    const token = signToken({ userId: result.id, email });
     const response = NextResponse.json({
-      user: { id: result.lastInsertRowid, fullName, email, phone },
+      user: { id: result.id, fullName, email, phone },
     });
     response.cookies.set("auth_token", token, {
       httpOnly: true,

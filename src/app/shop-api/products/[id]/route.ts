@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import getDb from "@/lib/db";
+import { supabase } from "@/lib/db";
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -11,12 +11,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const { name, price, description, discount, image, category } = await req.json();
 
-    const db = getDb();
-    db.prepare(
-      "UPDATE products SET name=?, price=?, description=?, discount=?, image=?, category=? WHERE id=?"
-    ).run(name, Number(price) * 100, description || "", Number(discount) || 0, image || "", category || "General", Number(id));
+    const { data: product, error } = await supabase
+      .from("products")
+      .update({
+        name,
+        price: Number(price) * 100,
+        description: description || "",
+        discount: Number(discount) || 0,
+        image: image || "",
+        category: category || "General",
+      })
+      .eq("id", Number(id))
+      .select()
+      .single();
 
-    const product = db.prepare("SELECT * FROM products WHERE id = ?").get(Number(id));
+    if (error) throw error;
     return NextResponse.json({ product });
   } catch (err) {
     console.error(err);
@@ -32,8 +41,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     const { id } = await params;
-    const db = getDb();
-    db.prepare("DELETE FROM products WHERE id = ?").run(Number(id));
+    const { error } = await supabase.from("products").delete().eq("id", Number(id));
+    if (error) throw error;
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error(err);

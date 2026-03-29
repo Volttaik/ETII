@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import getDb from "@/lib/db";
+import { supabase } from "@/lib/db";
 import { verifyToken } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
@@ -9,7 +9,11 @@ export async function GET(req: NextRequest) {
   const payload = verifyToken(token);
   if (!payload) return NextResponse.json({ user: null });
 
-  const db = getDb();
-  const user = db.prepare("SELECT id, fullName, email, phone FROM users WHERE id = ?").get(payload.userId);
+  const { data: user } = await supabase
+    .from("users")
+    .select("id, fullName, email, phone")
+    .eq("id", payload.userId)
+    .maybeSingle();
+
   return NextResponse.json({ user });
 }

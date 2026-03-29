@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import getDb from "@/lib/db";
+import { supabase } from "@/lib/db";
 import { verifyToken } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
-    const { customerName, customerEmail, customerPhone, deliveryAddress, city, state, items, total, paystackRef } =
-      await req.json();
+    const {
+      customerName, customerEmail, customerPhone,
+      deliveryAddress, city, state, items, total, paystackRef,
+    } = await req.json();
 
     if (!customerName || !customerEmail || !customerPhone || !deliveryAddress || !items?.length) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -18,24 +20,45 @@ export async function POST(req: NextRequest) {
       if (payload) userId = payload.userId;
     }
 
-    const db = getDb();
-    const orderResult = db.prepare(
-      `INSERT INTO orders (userId, customerName, customerEmail, customerPhone, deliveryAddress, city, state, total, paystackRef, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'paid')`
-    ).run(userId, customerName, customerEmail, customerPhone, deliveryAddress, city || "", state || "", total, paystackRef || "");
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .insert({
+        userId,
+        customerName,
+        customerEmail,
+        customerPhone,
+        deliveryAddress,
+        city: city || "",
+        state: state || "",
+        total,
+        paystackRef: paystackRef || "",
+        status: "paid",
+      })
+      .select("id")
+      .single();
 
-    const orderId = orderResult.lastInsertRowid;
-    const insertItem = db.prepare(
-      "INSERT INTO order_items (orderId, productId, productName, quantity, price) VALUES (?, ?, ?, ?, ?)"
+    if (orderError || !order) {
+      console.error(orderError);
+      return NextResponse.json({ error: "Server error" }, { status: 500 });
+    }
+
+    const orderItems = (items as Array<{ productId: number; productName: string; quantity: number; price: number }>).map(
+      (item) => ({
+        orderId: order.id,
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        price: item.price,
+      })
     );
-    const insertItems = db.transaction((items: Array<{ productId: number; productName: string; quantity: number; price: number }>) => {
-      for (const item of items) {
-        insertItem.run(orderId, item.productId, item.productName, item.quantity, item.price);
-      }
-    });
-    insertItems(items);
 
-    return NextResponse.json({ orderId }, { status: 201 });
+    const { error: itemsError } = await supabase.from("order_items").insert(orderItems);
+    if (itemsError) {
+      console.error(itemsError);
+      return NextResponse.json({ error: "Server error" }, { status: 500 });
+    }
+
+    return NextResponse.json({ orderId: order.id }, { status: 201 });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
@@ -49,13 +72,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const db = getDb();
-    const orders = db.prepare("SELECT * FROM orders ORDER BY createdAt DESC").all() as Array<Record<string, unknown>>;
-    const ordersWithItems = orders.map((order) => {
-      const items = db.prepare("SELECT * FROM order_items WHERE orderId = ?").all(order.id);
-      return { ...order, items };
-    });
-    return NextResponse.json({ orders: ordersWithItems });
+    const { data: orders, error } = await supabase
+      .from("orders")
+      .select("*, order_items(*)")
+      .order("createdAt", { ascending: false });
+
+    if (error) throw error;
+    return NextResponse.json({ orders });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

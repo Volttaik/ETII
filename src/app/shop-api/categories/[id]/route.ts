@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import getDb from "@/lib/db";
+import { supabase } from "@/lib/db";
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -9,8 +9,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     const { id } = await params;
-    const db = getDb();
-    db.prepare("DELETE FROM categories WHERE id = ?").run(Number(id));
+    const { error } = await supabase.from("categories").delete().eq("id", Number(id));
+    if (error) throw error;
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error(err);

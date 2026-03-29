@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import getDb from "@/lib/db";
+import { supabase } from "@/lib/db";
 
 export async function GET() {
   try {
-    const db = getDb();
-    const products = db.prepare("SELECT * FROM products ORDER BY createdAt DESC").all();
+    const { data: products, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("createdAt", { ascending: false });
+
+    if (error) throw error;
     return NextResponse.json({ products });
   } catch (err) {
     console.error(err);
@@ -24,12 +28,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Name and price required" }, { status: 400 });
     }
 
-    const db = getDb();
-    const result = db.prepare(
-      "INSERT INTO products (name, price, description, discount, image, category) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(name, Number(price) * 100, description || "", Number(discount) || 0, image || "", category || "General");
+    const { data: product, error } = await supabase
+      .from("products")
+      .insert({
+        name,
+        price: Number(price) * 100,
+        description: description || "",
+        discount: Number(discount) || 0,
+        image: image || "",
+        category: category || "General",
+      })
+      .select()
+      .single();
 
-    const product = db.prepare("SELECT * FROM products WHERE id = ?").get(result.lastInsertRowid);
+    if (error) throw error;
     return NextResponse.json({ product }, { status: 201 });
   } catch (err) {
     console.error(err);

@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import getDb from "@/lib/db";
+import { supabase } from "@/lib/db";
 
 export async function GET() {
   try {
-    const db = getDb();
-    const categories = db.prepare("SELECT * FROM categories ORDER BY createdAt ASC").all();
+    const { data: categories, error } = await supabase
+      .from("categories")
+      .select("*")
+      .order("createdAt", { ascending: true });
+
+    if (error) throw error;
     return NextResponse.json({ categories });
   } catch (err) {
     console.error(err);
@@ -24,17 +28,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
 
-    const db = getDb();
-    const result = db.prepare(
-      "INSERT INTO categories (name, image) VALUES (?, ?)"
-    ).run(name.trim(), image || "");
+    const { data: category, error } = await supabase
+      .from("categories")
+      .insert({ name: name.trim(), image: image || "" })
+      .select()
+      .single();
 
-    const category = db.prepare("SELECT * FROM categories WHERE id = ?").get(result.lastInsertRowid);
-    return NextResponse.json({ category }, { status: 201 });
-  } catch (err: any) {
-    if (err?.message?.includes("UNIQUE")) {
-      return NextResponse.json({ error: "Category already exists" }, { status: 409 });
+    if (error) {
+      if (error.code === "23505") {
+        return NextResponse.json({ error: "Category already exists" }, { status: 409 });
+      }
+      throw error;
     }
+    return NextResponse.json({ category }, { status: 201 });
+  } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }

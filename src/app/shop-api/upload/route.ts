@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import { supabase } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,15 +17,26 @@ export async function POST(req: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const uploadDir = path.join(process.cwd(), "public", "uploads");
-    await mkdir(uploadDir, { recursive: true });
-
     const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
     const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const filepath = path.join(uploadDir, filename);
-    await writeFile(filepath, buffer);
 
-    return NextResponse.json({ url: `/uploads/${filename}` });
+    const { error } = await supabase.storage
+      .from("uploads")
+      .upload(filename, buffer, {
+        contentType: file.type || "image/jpeg",
+        upsert: true,
+      });
+
+    if (error) {
+      console.error("Storage error:", error);
+      return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from("uploads")
+      .getPublicUrl(filename);
+
+    return NextResponse.json({ url: publicUrl });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
