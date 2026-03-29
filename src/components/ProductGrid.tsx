@@ -16,8 +16,6 @@ type Product = {
   description: string;
 };
 
-const CATEGORIES = ["Women", "Men", "Accessories"];
-
 export default function ProductGrid() {
   const [products, setProducts] = useState<Product[]>([]);
   const ref = useRef(null);
@@ -30,8 +28,14 @@ export default function ProductGrid() {
       .then((data) => setProducts(data.products || []));
   }, []);
 
-  const cats = CATEGORIES.filter((c) => products.some((p) => p.category === c));
-  const allOther = products.filter((p) => !CATEGORIES.includes(p.category));
+  // Group products by their actual category from the database
+  const categoryMap = new Map<string, Product[]>();
+  for (const product of products) {
+    const cat = product.category || "Other";
+    if (!categoryMap.has(cat)) categoryMap.set(cat, []);
+    categoryMap.get(cat)!.push(product);
+  }
+  const categories = Array.from(categoryMap.entries());
 
   return (
     <section id="products" ref={ref} className="py-16">
@@ -46,13 +50,16 @@ export default function ProductGrid() {
       </motion.div>
 
       <div className="flex flex-col gap-12">
-        {cats.map((cat, catIdx) => {
-          const catProducts = products.filter((p) => p.category === cat);
-          return <CategoryRow key={cat} category={cat} products={catProducts} inView={inView} delay={catIdx * 0.15} addToCart={addToCart} />;
-        })}
-        {allOther.length > 0 && (
-          <CategoryRow category="Other" products={allOther} inView={inView} delay={cats.length * 0.15} addToCart={addToCart} />
-        )}
+        {categories.map(([cat, catProducts], catIdx) => (
+          <CategoryRow
+            key={cat}
+            category={cat}
+            products={catProducts}
+            inView={inView}
+            delay={catIdx * 0.15}
+            addToCart={addToCart}
+          />
+        ))}
       </div>
     </section>
   );
@@ -78,9 +85,19 @@ function CategoryRow({ category, products, inView, delay, addToCart }: RowProps)
         <a href="#" className="text-xs font-medium text-muted-foreground hover:text-foreground tracking-wide">View all</a>
       </div>
       <div className="flex flex-col gap-3">
-        <ScrollRow products={products.slice(0, half)} liked={liked} onLike={(id) => setLiked(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; })} onAdd={(p) => { addToCart({ id: p.id, name: p.name, price: p.price, image: p.image, category: p.category }); toast(`${p.name} added to cart`); }} />
+        <ScrollRow
+          products={products.slice(0, half)}
+          liked={liked}
+          onLike={(id) => setLiked(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; })}
+          onAdd={(p) => { addToCart({ id: p.id, name: p.name, price: p.price, image: p.image, category: p.category }); toast(`${p.name} added to cart`); }}
+        />
         {products.length > half && (
-          <ScrollRow products={products.slice(half)} liked={liked} onLike={(id) => setLiked(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; })} onAdd={(p) => { addToCart({ id: p.id, name: p.name, price: p.price, image: p.image, category: p.category }); toast(`${p.name} added to cart`); }} />
+          <ScrollRow
+            products={products.slice(half)}
+            liked={liked}
+            onLike={(id) => setLiked(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; })}
+            onAdd={(p) => { addToCart({ id: p.id, name: p.name, price: p.price, image: p.image, category: p.category }); toast(`${p.name} added to cart`); }}
+          />
         )}
       </div>
     </motion.div>
@@ -115,7 +132,10 @@ function ScrollRow({ products, liked, onLike, onAdd }: ScrollRowProps) {
                     Sale
                   </span>
                 )}
-                <button onClick={() => onLike(p.id)} className="absolute top-2 right-2 w-6 h-6 bg-background/80 backdrop-blur-sm rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                <button
+                  onClick={() => onLike(p.id)}
+                  className="absolute top-2 right-2 w-6 h-6 bg-background/80 backdrop-blur-sm rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                >
                   <Heart className={`w-3 h-3 ${liked.has(p.id) ? "fill-foreground" : ""} text-foreground`} />
                 </button>
               </div>
@@ -126,7 +146,10 @@ function ScrollRow({ products, liked, onLike, onAdd }: ScrollRowProps) {
                   <span className="text-[11px] font-bold">₦{((discountedPrice ?? p.price) / 100).toLocaleString("en-NG")}</span>
                   {discountedPrice && <span className="text-[10px] text-muted-foreground line-through">₦{(p.price / 100).toLocaleString("en-NG")}</span>}
                 </div>
-                <button onClick={() => onAdd(p)} className="mt-1.5 w-full flex items-center justify-center gap-1 bg-foreground text-background rounded-md py-1 text-[10px] font-semibold hover:bg-foreground/80 transition-colors">
+                <button
+                  onClick={() => onAdd(p)}
+                  className="mt-1.5 w-full flex items-center justify-center gap-1 bg-foreground text-background rounded-md py-1 text-[10px] font-semibold hover:bg-foreground/80 transition-colors"
+                >
                   <ShoppingBag className="w-2.5 h-2.5" /> Add
                 </button>
               </div>
